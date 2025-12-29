@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -172,7 +173,7 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = "Top1000_Journals_OpenAlex_2025_Alphabetical_WithEnergyConversions.csv";
+    a.download = "impact_factor.csv";
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -225,8 +226,8 @@
       (a.journal || "").localeCompare(b.journal || "", undefined, {sensitivity:"base"})
     );
 
-    setStatus(`Loaded ${allRows.length} journals (including Energy Conversions). Sorted A–Z.`);
-    renderPage();
+    setStatus("Ready.");
+renderPage();
   }
 
   document.getElementById('loadBtn').addEventListener('click', async () => {
