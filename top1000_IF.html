@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Top 1000 Journals (OpenAlex) — Alphabetical (A–Z)</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 16px; }
+    h2 { margin: 0 0 10px 0; }
+    .note { font-size: 12px; color: #444; margin: 10px 0 16px 0; line-height: 1.4; }
+    .banner { padding: 10px 12px; border: 1px solid #f3c969; background: #fff7dd; margin: 12px 0 16px; border-radius: 8px; }
+    .controls { display: flex; gap: 10px; align-items: center; margin: 12px 0 16px; flex-wrap: wrap; }
+    input[type="text"] { padding: 8px 10px; width: 320px; max-width: 100%; }
+    button { padding: 8px 12px; cursor: pointer; }
+    .status { font-size: 12px; color: #333; }
+    table.citescope { width: 100%; border-collapse: collapse; font-size: 14px; }
+    table.citescope th { text-align: left; border-bottom: 1px solid #ccc; padding: 10px; position: sticky; top: 0; background: #fff; }
+    table.citescope td { border-bottom: 1px solid #eee; padding: 10px; vertical-align: top; }
+    table.citescope td.num, table.citescope th.num { text-align: right; }
+    .pager { margin-top: 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .small { font-size: 12px; color: #555; }
+    .muted { color: #777; }
+    code { background:#f6f6f6; padding:2px 4px; border-radius:4px; }
+  </style>
+</head>
+<body>
+<div id="fileBanner" class="banner" style="display:none;">
+    <b>Local file warning:</b> You opened this page from <code>file:///</code>. Many browsers block API requests from local files, so loading may fail.<br/>
+    <b>Fix:</b> Upload this HTML into your site (recommended), or test locally using a simple server:<br/>
+    <span class="small">Windows: run <code>python -m http.server 8000</code> in the folder, then open <code>http://localhost:8000/</code></span>
+  </div>
+
+  <div class="controls">
+    <button id="loadBtn">Load / Reload</button>
+    <input id="searchBox" type="text" placeholder="Filter by journal name (e.g., Energy)" />
+    <span class="status" id="status">Loading…</span>
+  </div>
+
+  <div style="overflow:auto; max-height: 70vh; border: 1px solid #f0f0f0;">
+    <table class="citescope" id="tbl">
+      <thead>
+        <tr>
+          <th style="min-width:280px;">Journal</th>
+          <th style="min-width:110px;">ISSN-L</th>
+          <th class="num" style="min-width:170px;">Citations received in 2025</th>
+          <th class="num" style="min-width:170px;">Items published in 2025</th>
+          <th class="num" style="min-width:120px;">Annual IF (2025)</th>
+        </tr>
+      </thead>
+      <tbody id="tbody">
+        <tr><td colspan="5" class="muted">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="pager">
+    <button id="prevBtn" disabled>Prev</button>
+    <button id="nextBtn" disabled>Next</button>
+    <span class="small" id="pageInfo"></span>
+    <button id="downloadCsvBtn" disabled>Download CSV</button>
+  </div>
+
+<script>
+(() => {
+  const YEAR = 2025;
+  const PER_PAGE = 200;
+  const PAGES = 5;      // 200 * 5 = 1000
+  const PAGE_SIZE = 100;
+
+  const statusEl = document.getElementById('status');
+  const tbody = document.getElementById('tbody');
+  const searchBox = document.getElementById('searchBox');
+
+  const prevBtn = document.getElementById('prevBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  const pageInfo = document.getElementById('pageInfo');
+  const downloadCsvBtn = document.getElementById('downloadCsvBtn');
+
+  let allRows = [];
+  let filtered = [];
+  let page = 1;
+
+  // --- Custom row (NOT pinned) ---
+  // This ensures your journal appears even if OpenAlex doesn't list it yet.
+  const customRows = [
+    {
+      journal: "Energy Conversions",
+      issn_l: "3106-1508",
+      citations: 217,
+      works: 35,
+      annual_if: 6.2000000000,
+      id: "manual:energyconversions"
+    }
+  ];
+
+  if (location.protocol === "file:") {
+    document.getElementById("fileBanner").style.display = "block";
+  }
+
+  function setStatus(msg) { statusEl.textContent = msg; }
+
+  function getYearCounts(countsByYear) {
+    if (!Array.isArray(countsByYear)) return {citations: null, works: null};
+    const y = countsByYear.find(x => x && x.year === YEAR);
+    if (!y) return {citations: null, works: null};
+    return {citations: y.cited_by_count ?? null, works: y.works_count ?? null};
+  }
+
+  function computeAnnualIF(citations, works) {
+    if (citations == null || works == null || works === 0) return null;
+    return citations / works;
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  }
+
+  function renderPage() {
+    const q = searchBox.value.trim().toLowerCase();
+    filtered = q
+      ? allRows.filter(r => (r.journal || '').toLowerCase().includes(q))
+      : allRows.slice();
+
+    const total = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    page = Math.min(page, totalPages);
+
+    const start = (page - 1) * PAGE_SIZE;
+    const end = Math.min(start + PAGE_SIZE, total);
+    const slice = filtered.slice(start, end);
+
+    tbody.innerHTML = slice.length ? slice.map(r => {
+      const aif = (r.annual_if == null) ? '' : Number(r.annual_if).toFixed(4);
+      const cit = (r.citations == null) ? '' : r.citations;
+      const works = (r.works == null) ? '' : r.works;
+      return `
+        <tr>
+          <td>${escapeHtml(r.journal)}</td>
+          <td>${escapeHtml(r.issn_l)}</td>
+          <td class="num">${cit}</td>
+          <td class="num">${works}</td>
+          <td class="num">${aif}</td>
+        </tr>`;
+    }).join('') : `<tr><td colspan="5" class="muted">No matches.</td></tr>`;
+
+    prevBtn.disabled = page <= 1;
+    nextBtn.disabled = page >= totalPages;
+    pageInfo.textContent = total ? `Showing ${start + 1}-${end} of ${total} (page ${page}/${totalPages})` : "";
+    downloadCsvBtn.disabled = (allRows.length === 0);
+  }
+
+  function toCsv(rows) {
+    const header = ["Journal","ISSN-L","Citations_2025","Items_2025","Annual_IF_2025","Source_ID"];
+    const lines = [header.join(",")];
+    for (const r of rows) {
+      const vals = [
+        `"${String(r.journal ?? '').replaceAll('"','""')}"`,
+        `"${String(r.issn_l ?? '').replaceAll('"','""')}"`,
+        (r.citations ?? ""),
+        (r.works ?? ""),
+        (r.annual_if == null ? "" : Number(r.annual_if).toFixed(4)),
+        `"${String(r.id ?? '').replaceAll('"','""')}"`
+      ];
+      lines.push(vals.join(","));
+    }
+    return lines.join("\n");
+  }
+
+  function downloadCsv() {
+    const csv = toCsv(allRows);
+    const blob = new Blob([csv], {type: "text/csv;charset=utf-8"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = "Top1000_Journals_OpenAlex_2025_Alphabetical_WithEnergyConversions.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function fetchTop1000() {
+    allRows = [];
+    page = 1;
+    tbody.innerHTML = `<tr><td colspan="5" class="muted">Loading…</td></tr>`;
+    setStatus("Fetching from OpenAlex…");
+
+    const base = "https://api.openalex.org/sources";
+    const common = new URLSearchParams({
+      "filter": "type:journal,has_issn:true",
+      "sort": "cited_by_count:desc",
+      "per-page": String(PER_PAGE),
+      "select": "id,display_name,issn_l,counts_by_year,cited_by_count"
+    });
+
+    for (let p = 1; p <= PAGES; p++) {
+      setStatus(`Fetching page ${p}/${PAGES}…`);
+      const url = `${base}?${common.toString()}&page=${p}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`OpenAlex request failed (page ${p}): ${res.status}`);
+      const data = await res.json();
+      const results = data.results || [];
+
+      for (const s of results) {
+        const journal = s.display_name || "";
+        const issn_l = s.issn_l || "";
+        const {citations, works} = getYearCounts(s.counts_by_year);
+        const annual_if = computeAnnualIF(citations, works);
+
+        allRows.push({
+          journal,
+          issn_l,
+          citations: citations ?? null,
+          works: works ?? null,
+          annual_if,
+          id: s.id || ""
+        });
+      }
+    }
+
+    // Add your journal, then sort A–Z (no pinning)
+    allRows = customRows.concat(allRows);
+
+    allRows.sort((a,b) =>
+      (a.journal || "").localeCompare(b.journal || "", undefined, {sensitivity:"base"})
+    );
+
+    setStatus(`Loaded ${allRows.length} journals (including Energy Conversions). Sorted A–Z.`);
+    renderPage();
+  }
+
+  document.getElementById('loadBtn').addEventListener('click', async () => {
+    try {
+      await fetchTop1000();
+    } catch (e) {
+      console.error(e);
+      setStatus("Error loading data.");
+      const help = (location.protocol === "file:")
+        ? "Tip: upload this page to your site or run it via http://localhost (see warning box above)."
+        : "Open the browser console for details.";
+      tbody.innerHTML = `<tr><td colspan="5" class="muted">Error: ${escapeHtml(e.message)}<br/>${escapeHtml(help)}</td></tr>`;
+    }
+  });
+
+  searchBox.addEventListener('input', () => renderPage());
+  prevBtn.addEventListener('click', () => { page = Math.max(1, page - 1); renderPage(); });
+  nextBtn.addEventListener('click', () => { page = page + 1; renderPage(); });
+  downloadCsvBtn.addEventListener('click', downloadCsv);
+
+  (async () => {
+    try {
+      await fetchTop1000();
+    } catch (e) {
+      console.error(e);
+      setStatus("Error loading data.");
+      const help = (location.protocol === "file:")
+        ? "Tip: upload this page to your site or run it via http://localhost (see warning box above)."
+        : "Open the browser console for details.";
+      tbody.innerHTML = `<tr><td colspan="5" class="muted">Error: ${escapeHtml(e.message)}<br/>${escapeHtml(help)}</td></tr>`;
+    }
+  })();
+})();
+</script>
+</body>
+</html>
