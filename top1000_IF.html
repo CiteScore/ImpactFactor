@@ -46,10 +46,11 @@
           <th class="num" style="min-width:170px;">Citations received in 2025</th>
           <th class="num" style="min-width:170px;">Items published in 2025</th>
           <th class="num" style="min-width:120px;">Annual IF (2025)</th>
-        </tr>
+        <th class="num" style="min-width:160px;">CiteScore (18-Month)</th>
+</tr>
       </thead>
       <tbody id="tbody">
-        <tr><td colspan="5" class="muted">Loading…</td></tr>
+        <tr><td colspan="6" class="muted">Loading…</td></tr>
       </tbody>
     </table>
   </div>
@@ -132,6 +133,7 @@
 
     tbody.innerHTML = slice.length ? slice.map(r => {
       const aif = (r.annual_if == null) ? '' : Number(r.annual_if).toFixed(4);
+      const cs18 = (r.annual_if == null) ? '' : (Number(r.annual_if) * 1.5).toFixed(1);
       const cit = (r.citations == null) ? '' : r.citations;
       const works = (r.works == null) ? '' : r.works;
       return `
@@ -141,8 +143,9 @@
           <td class="num">${cit}</td>
           <td class="num">${works}</td>
           <td class="num">${aif}</td>
+          <td class="num">${cs18}</td>
         </tr>`;
-    }).join('') : `<tr><td colspan="5" class="muted">No matches.</td></tr>`;
+    }).join('') : `<tr><td colspan="6" class="muted">No matches.</td></tr>`;
 
     prevBtn.disabled = page <= 1;
     nextBtn.disabled = page >= totalPages;
@@ -151,7 +154,7 @@
   }
 
   function toCsv(rows) {
-    const header = ["Journal","ISSN-L","Citations_2025","Items_2025","Annual_IF_2025","Source_ID"];
+    const header = ["Journal","ISSN-L","Citations_2025","Items_2025","Annual_IF_2025","CiteScore_18m","Source_ID"];
     const lines = [header.join(",")];
     for (const r of rows) {
       const vals = [
@@ -160,6 +163,7 @@
         (r.citations ?? ""),
         (r.works ?? ""),
         (r.annual_if == null ? "" : Number(r.annual_if).toFixed(4)),
+        (r.annual_if == null ? "" : (Number(r.annual_if) * 1.5).toFixed(1)),
         `"${String(r.id ?? '').replaceAll('"','""')}"`
       ];
       lines.push(vals.join(","));
@@ -183,7 +187,7 @@
   async function fetchTop1000() {
     allRows = [];
     page = 1;
-    tbody.innerHTML = `<tr><td colspan="5" class="muted">Loading…</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="muted">Loading…</td></tr>`;
     setStatus("Fetching from OpenAlex…");
 
     const base = "https://api.openalex.org/sources";
@@ -239,7 +243,7 @@ renderPage();
       const help = (location.protocol === "file:")
         ? "Tip: upload this page to your site or run it via http://localhost (see warning box above)."
         : "Open the browser console for details.";
-      tbody.innerHTML = `<tr><td colspan="5" class="muted">Error: ${escapeHtml(e.message)}<br/>${escapeHtml(help)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" class="muted">Error: ${escapeHtml(e.message)}<br/>${escapeHtml(help)}</td></tr>`;
     }
   });
 
@@ -257,7 +261,7 @@ renderPage();
       const help = (location.protocol === "file:")
         ? "Tip: upload this page to your site or run it via http://localhost (see warning box above)."
         : "Open the browser console for details.";
-      tbody.innerHTML = `<tr><td colspan="5" class="muted">Error: ${escapeHtml(e.message)}<br/>${escapeHtml(help)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" class="muted">Error: ${escapeHtml(e.message)}<br/>${escapeHtml(help)}</td></tr>`;
     }
   })();
 })();
